@@ -1,4 +1,5 @@
 # Example: Download wind offshore forecast data for germany (15 minutes interval - 01.01.2021-01.01.2025)
+
 from entsoe import EntsoePandasClient
 import pandas as pd
 import time
