@@ -1,0 +1,68 @@
+# Example: Download wind offshore forecast data for germany (15 minutes interval - 01.01.2021-01.01.2025)
+from entsoe import EntsoePandasClient
+import pandas as pd
+import time
+
+# !INSERT API KEY! and client! 
+
+API_KEY = "API KEY"
+client = EntsoePandasClient(api_key=API_KEY)
+
+# Retry function
+def retry_query(func, *args, retries=5, backoff_factor=0.5, **kwargs):
+    for attempt in range(retries):
+        try:
+            return func(*args, **kwargs)
+        except ConnectionError as e:
+            if attempt < retries - 1:
+                wait_time = backoff_factor * (2 ** attempt)
+                print(f"ConnectionError: {e}. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                print("Max retries reached. Raising the exception.")
+                raise
+
+# Define yearly chunks
+periods = [
+    (pd.Timestamp("2021-01-01T00:00", tz="Europe/Berlin"), pd.Timestamp("2022-01-01T00:00", tz="Europe/Berlin")),
+    (pd.Timestamp("2022-01-01T00:00", tz="Europe/Berlin"), pd.Timestamp("2023-01-01T00:00", tz="Europe/Berlin")),
+    (pd.Timestamp("2023-01-01T00:00", tz="Europe/Berlin"), pd.Timestamp("2024-01-01T00:00", tz="Europe/Berlin")),
+    (pd.Timestamp("2024-01-01T00:00", tz="Europe/Berlin"), pd.Timestamp("2025-01-01T00:00", tz="Europe/Berlin")),
+]
+
+# Lists to store results
+wind_offshore_da_list = []
+wind_offshore_id_list = []
+
+# Fetch data for each year
+for start, end in periods:
+    print(f"Fetching data from {start} to {end}...")
+    # Day-Ahead Offshore Wind (PSR B18)
+    wind_offshore_da = retry_query(
+        client.query_wind_and_solar_forecast,
+        country_code="DE",
+        start=start,
+        end=end,
+        psr_type="B18"
+    )
+    wind_offshore_da_list.append(wind_offshore_da)
+
+    # Intraday Offshore Wind (PSR B18)
+    wind_offshore_id = retry_query(
+        client.query_intraday_wind_and_solar_forecast,
+        country_code="DE",
+        start=start,
+        end=end,
+        psr_type="B18"
+    )
+    wind_offshore_id_list.append(wind_offshore_id)
+
+# Concatenate results
+wind_offshore_da = pd.concat(wind_offshore_da_list)
+wind_offshore_id = pd.concat(wind_offshore_id_list)
+
+# Save to CSV
+wind_offshore_da.to_csv("wind_offshore_da_20210101_20250101.csv", header=["wind_offshore_da_MW"])
+wind_offshore_id.to_csv("wind_offshore_id_20210101_20250101.csv", header=["wind_offshore_id_MW"])
+
+print("Offshore wind day-ahead and intraday forecasts saved to CSV.")
