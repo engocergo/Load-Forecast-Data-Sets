@@ -1,0 +1,47 @@
+pip install openmeteo-requests pandas requests-cache retry-requests
+import openmeteo_requests
+import pandas as pd
+import requests_cache
+from retry_requests import retry
+
+# Settin the Open-Meteo API client with caching and retries
+cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
+retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+openmeteo = openmeteo_requests.Client(session=retry_session)
+
+# API request parameters 
+# Example: Berlin
+url = "https://archive-api.open-meteo.com/v1/archive"
+params = {
+    "latitude": 52.52,
+    "longitude": 13.41,
+    "start_date": "2021-01-01",
+    "end_date": "2025-01-01",
+    "hourly": "shortwave_radiation"
+}
+
+# Fetching the weather data
+responses = openmeteo.weather_api(url, params=params)
+response = responses[0]
+
+# Extracting the hourly data
+hourly = response.Hourly()
+hourly_shortwave_radiation = hourly.Variables(0).ValuesAsNumpy()
+
+# Create date range index
+hourly_data = {
+    "date": pd.date_range(
+        start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+        end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+        freq=pd.Timedelta(seconds=hourly.Interval()),
+        inclusive="left"
+    ),
+    "shortwave_radiation": hourly_shortwave_radiation
+}
+
+# Create DataFrame and save as CSV
+df = pd.DataFrame(data=hourly_data)
+df.to_csv("shortwave_radiation_berlin_2021_2025.csv", index=False)
+
+print("✅ CSV file successfully saved as 'shortwave_radiation_berlin_2021_2025.csv'")
+
