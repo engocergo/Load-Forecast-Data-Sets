@@ -1,0 +1,67 @@
+import pandas as pd
+import numpy as np
+
+# ------------------------------------------------------------------
+# 1) Load data
+# ------------------------------------------------------------------
+FILE_IN  = "actual_load_amprion_20210101_20250101.csv"
+FILE_OUT = "amprion_load_features_15min.csv"
+
+# Load and parse timestamp index
+load = (
+    pd.read_csv(FILE_IN, index_col=0, parse_dates=True)
+      .sort_index()
+      .rename(columns={"actual_load_MW": "load_MW"})  # use internal name for convenience
+)
+
+# Enforce 15-min frequency (preserve gaps if any)
+load = load.asfreq("15T")
+
+# Define time windows in steps (15min = 1 step)
+steps = {
+    "15m": 1,
+    "1h": 4,
+    "6h": 24,
+    "24h": 96,
+    "7d": 96 * 7
+}
+
+# ------------------------------------------------------------------
+# 2) Generate Features
+# ------------------------------------------------------------------
+df = pd.DataFrame(index=load.index)
+
+# 1. Current load
+df["Load_t"] = load["load_MW"]
+
+# 2. Lagged load
+df["Load_t-1"]   = load["load_MW"].shift(steps["15m"])
+df["Load_t-4"]   = load["load_MW"].shift(steps["1h"])
+df["Load_t-96"]  = load["load_MW"].shift(steps["24h"])
+df["Load_t-672"] = load["load_MW"].shift(steps["7d"])
+
+# 3. Rolling means
+df["Load_mean_1h"]  = load["load_MW"].rolling(steps["1h"]).mean()
+df["Load_mean_6h"]  = load["load_MW"].rolling(steps["6h"]).mean()
+df["Load_mean_24h"] = load["load_MW"].rolling(steps["24h"]).mean()
+df["Load_mean_7d"]  = load["load_MW"].rolling(steps["7d"]).mean()
+
+# 3. Rolling std, min, max
+df["Load_std_1h"]   = load["load_MW"].rolling(steps["1h"]).std()
+df["Load_std_24h"]  = load["load_MW"].rolling(steps["24h"]).std()
+df["Load_min_24h"]  = load["load_MW"].rolling(steps["24h"]).min()
+df["Load_max_24h"]  = load["load_MW"].rolling(steps["24h"]).max()
+
+# 4. Load differences
+df["ΔLoad_t_t-1"]   = load["load_MW"].diff(steps["15m"])
+df["ΔLoad_t_t-96"]  = load["load_MW"].diff(steps["24h"])
+
+# 5. Load ratio
+df["LoadRatio_t_t-96"] = load["load_MW"] / load["load_MW"].shift(steps["24h"])
+
+# ------------------------------------------------------------------
+# 3) Save to CSV
+# ------------------------------------------------------------------
+df.to_csv(FILE_OUT, float_format="%.3f")
+
+print(f"✅ Features created and saved: {FILE_OUT}")
