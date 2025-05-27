@@ -1,1 +1,52 @@
+from entsoe import EntsoePandasClient
+import pandas as pd
+import time
 
+# Initialize API client
+API_KEY = "API KEY"
+client = EntsoePandasClient(api_key=API_KEY)
+
+# Retry function
+def retry_query(func, *args, retries=5, backoff_factor=0.5, **kwargs):
+    for attempt in range(retries):
+        try:
+            return func(*args, **kwargs)
+        except ConnectionError as e:
+            if attempt < retries - 1:
+                wait_time = backoff_factor * (2 ** attempt)
+                print(f"ConnectionError: {e}. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                print("Max retries reached. Raising the exception.")
+                raise
+
+# Define yearly chunks
+periods = [
+    (pd.Timestamp("2021-01-01T00:00", tz="Europe/Berlin"), pd.Timestamp("2022-01-01T00:00", tz="Europe/Berlin")),
+    (pd.Timestamp("2022-01-01T00:00", tz="Europe/Berlin"), pd.Timestamp("2023-01-01T00:00", tz="Europe/Berlin")),
+    (pd.Timestamp("2023-01-01T00:00", tz="Europe/Berlin"), pd.Timestamp("2024-01-01T00:00", tz="Europe/Berlin")),
+    (pd.Timestamp("2024-01-01T00:00", tz="Europe/Berlin"), pd.Timestamp("2025-01-01T00:00", tz="Europe/Berlin")),
+]
+
+# List to store results
+actual_load_list = []
+
+# Fetch data for each year
+for start, end in periods:
+    print(f"Fetching actual load data from {start} to {end}...")
+    # Actual Load for Amprion (CTY|10YDE-RWENET---I)
+    actual_load = retry_query(
+        client.query_load,
+        country_code="DE_AMPRION",
+        start=start,
+        end=end
+    )
+    actual_load_list.append(actual_load)
+
+# Concatenate results
+actual_load = pd.concat(actual_load_list)
+
+# Save to CSV
+actual_load.to_csv("actual_load_amprion_20210101_20250101.csv", header=["actual_load_MW"])
+
+print("Actual load data for Amprion saved to CSV.")
