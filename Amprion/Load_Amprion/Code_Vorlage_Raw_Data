@@ -2,7 +2,7 @@ from entsoe import EntsoePandasClient
 import pandas as pd
 import time
 
-# Initialize API client
+# Input API KEY!!!!!!!
 API_KEY = "API KEY"
 client = EntsoePandasClient(api_key=API_KEY)
 
